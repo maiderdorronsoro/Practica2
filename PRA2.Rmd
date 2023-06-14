@@ -1,0 +1,249 @@
+---
+title: "Práctica 2: Limpieza y análisis de datos"
+author: "Maider Dorronsoro, Flavia Felletti"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: yes
+    latex_engine: xelatex
+    keep_tex: true
+  html_document:
+    toc: yes
+#bibliography: scholar.bib
+---
+\newpage{}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r cargar_librerias, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+library(car)
+
+```
+
+# 1 Descripción del dataset.
+
+El dataset seleccionado son datos relativos a pacientes de diferentes países, en concreto a pacientes con alguna enfermedad cardiovascular. 
+Según los datos de la World Health Organization (WHO), las enfermedades cardiovasculares son la principal causa de muerte en el mundo. Se ha calculado que cada año al rededor de 17.9 millones de personas pierden su vida por alguna enfermedad cardiovascular.Además, un tercio de ellos, son personas menores a 70 años, lo cual provoca una muerte temprana.Por ello, creemos importante e interesante analizar esta problemática. 
+
+Al fin y al cabo, en este proyecto se va a analizar/detectar los factores que más aumentan la probabilidad de padecer de enfermedades cardiovasculares
+El dataset ha sido obtenido de esta fuente: https://www.kaggle.com/datasets/rashikrahmanpritom/heart-attack-analysis-prediction-dataset
+
+```{r cargar_datos}
+df<-read.csv("heart.csv")
+df$sex <- as.character(df$sex)
+```
+
+
+A continuación, se procede a hacer un pequeño análisis del dataset:
+
+```{R}
+# visualizo las dimensiones del dataset:
+dimdat <- dim(df)
+dimdat
+```
+
+Tenemos un conjunto de datos con 303 registros y 14 variables a analizar, de las cuales solo vamos a describir las que nos interesan en este análisis. 
+
+\begin{itemize}
+  \item Age:Edad de los pacientes
+  \item Sex:Género pacientes [0: F, 1: M]
+  \item trtbps: Resting blood pressure- Presión arterial en reposo [mm Hg]
+  \item chol: Colesterol [mm/dl]
+  \item restecg: Resultados del electrocardiograma en reposo [0: Normal, 1: con anormalidad de la onda ST-T, 2: muestra hipertrofia ventricular izquierda probable o definitiva según los criterios de Estes].
+  \item thalachh: Frecuencia cardíaca máxima alcanzada [Valor numérico entre 71 y 202]
+  \item output: Enfermedad cardiaca [1: tiene enfermedad cardíaca, 0: no tiene enfermedad cardíaca]
+\end{itemize}
+
+
+A continuación un resumen estadístico de las diferentes variables a analizar:
+
+```{R}
+summary(df)
+```
+
+
+---
+
+
+# 2 Integración y selección de los datos de interés a analizar. 
+
+En este proyecto se quiere analizar la realidad de las enfermedades cardiovasculares de las personas en relación a las variables seleccionadas.Como unicamente nos interesan las mencioandas, se hace una subselección de estas. 
+
+```{r}
+df <- select (df,'age','sex', 'chol','restecg','trtbps','thalachh','output')
+df$sex <- ifelse(df$sex=='0','F','M')
+head(df)
+```
+
+---
+
+# 3 Limpieza de los datos.
+## 3.1. ¿Los datos contienen ceros o elementos vacíos? Gestiona cada uno de estos casos.
+
+A continuación se procede a analizar la existencia de valores perdidos NA, NULL o blancos:
+
+```{R}
+# averiguo si el dataset contiene valores NA ("not available")
+any(is.na(df))
+# averiguo si hay valores NULL
+any(is.null(df))
+# averiguo si hay valores blancos
+any(df == "")
+```
+
+Tal y como se puede observar no hay registros incompletos, por lo que no se van a tratar. 
+
+## 3.2. Identifica y gestiona los valores extremos
+
+
+**Diagrama de cajas de la variable Cholesterol** 
+
+```{R}
+boxplot(df$chol,
+  ylab = "Cholesterol levels",
+  col = "red3"
+)
+```
+
+**Histograma de la variable Cholesterol**
+
+```{R}
+hist(df$chol, xlab="Cholesterol",
+     main="Cholesterol Distribution", col="red3")
+```
+Se puede observar que existen valores de colesteról que superan los 400 mm/dl. Esto no tiene porqué ser resultado de un error; de hecho, el colesteról tan alto podría ser causa de una enfermedad cardiaca grave.^[según este artículo en la sección "health" de CNN, hay condiciones genéticas que pueden provocar niveles de hasta 600 mg/dL http://edition.cnn.com/2009/HEALTH/11/24/moh.healthmag.cholesterol.surprises/index.html#:~:text=But%20for%20some%20families%2C%20it's,heart%20attacks%20early%20in%20life.] 
+
+Otros casos de incosistencisa o datos incoherentes podrían ser los valores de restecg (presión arterial en en reposo) y Chol (colesterol) iguales a 0.
+
+A continuación se analiza la cantidad de resgistros que tienen colesterol igual a 0 y/o presión arterial en reposo igual a 0.
+
+```{R}
+# Cholesterol equal zero
+"Cholesterol:"
+sum(df$chol == 0)
+
+# RestingBP equal zero
+"RestingBP:"
+sum(df$trtbps == 0)
+```
+
+Contamos el número de observaciones que tienen colesteról inferior a 40 mg/dL, que equivale a niveles muy bajos de colesteról, aunque probables.^[Según el artículo: https://www.mayoclinic.org/diseases-conditions/high-blood-cholesterol/expert-answers/cholesterol-level/faq-20057952]
+
+```{R}
+sum(df$chol < 40)
+```
+Se eliminarán del conjunto de datos las observaciones que tienen niveles de colesterol o de presión cardíaca en reposo iguales a cero y se vuelve a visualizar el resúmen estadistico.
+
+```{R}
+# creates a new dataset deleting Cholesterol = 0 and RestingBP = 0 from
+# the original dataset
+dff <- df[(df$chol != 0 & df$restecg != 0),]
+
+# visualizes summary
+summary(dff)
+```
+
+
+**Visualización de las variables**
+
+Visualizamos una premera representación gráfica de la distribución de los datos por cada variable:
+
+
+```{R echo= FALSE}
+#install.packages("Hmisc")
+library(Hmisc)
+par(mar = c(5, 4, 1, 1))  # Adjust the margin values as needed
+
+hist.data.frame(dff)
+```
+
+---
+
+# 4 Análisis de los datos.
+## 4.1. Selección de los grupos de datos que se quieren analizar/comparar 
+## 4.2. Comprobación de la normalidad y homogeneidad de la varianza.
+## 4.3. Aplicación de pruebas estadísticas para comparar los grupos de datos.
+Los datos que se van a utilizar en los siguientes análisis es el dataset ya limpio de los anteriores apartados.
+Además, para cada análisis que se modificará como sea necesario el dataframe. 
+
+
+### Análisis de correlaciones
+```{R echo= FALSE}
+#install.packages('corrplot')
+library("corrplot")
+# selecciono la variables numéricas de tipo numerico 
+n = dff %>% select(where(is.numeric))
+factores= n
+# calculo las correlaciones
+res<-cor(factores)
+# represento graficamente las correlaciones
+corrplot(res,method="color",tl.col="black", tl.srt=30, order = "AOE",
+number.cex=0.75,sig.level = 0.01, addCoef.col = "black")
+```
+
+
+Se puede observar que hay una correlación moderada entre la variable output (enfermedad cardíaca) y la variabla thalachh (frecuencia cardíaca máxima alcanzada), ya que está llega a 0,45. 
+
+### Análisis de regresión logística
+
+Una vez analizadas las correlaciones vamos a calcular la regresión logística para calcular la variable de salida, la cual es dicotomica:
+
+
+```{r }
+modelo <- glm(dff$output ~ dff$age + dff$sex + dff$chol + 
+                dff$restecg + dff$trtbps + dff$thalachh, data=dff)
+summary(modelo)
+```
+Tal y como se puede observar las variables más relevantes son el sexo y el thalachh, ya que son las únicas que han resultado significativas.$$(P_value < 0.05)$$ Además, se cumple la estimación que se había hecho en estudio de correlaciones, ya que la variable thalachh tiene un impacto positivo, de forma que cuanto mayor sea, mayor es la probabilidad de padecer una enfermedad cardiovascular. 
+
+### Análisis de contraste de hipótesis de dos poblaciones
+
+Por último, se va a anlizar analizar si la edad media de los pacientes es la misma independientemente del sexo. Es decir, se analizará si la media de edad de los hombres y mujeres enfermos es la misma (output=1): 
+
+```{r echo= FALSE}
+dff_sick <- subset(dff, dff$output=='1')
+
+#la varianza es la misma - HOMOGENEA
+leveneTest(dff_sick$age ~ dff_sick$sex,dff_sick)
+
+#A continuacion se analiza si la variable edad sigue una normal:
+shapiro.test(dff_sick$age)
+```
+Gracias a estas pruebas se ha visto que aunque la varianza de esta variable sea homogenea, es decir, y sigue una distribución normal. Ello implica que podemos utilizar el contraste de hipótesis de medias usual: 
+
+
+$$
+H_1: \mu_{m}\neq\mu_{f}\\
+H_0: \mu_{m}=\mu_{f}
+$$
+
+En concreto, la prueba que se va a realizar es un contraste de hipótesis bilateral:
+```{r }
+#Generamos dos grupos
+dff1<- subset(dff,dff$output=='1')
+df_m <- subset(dff1,dff1$sex == 'M')
+df_f <- subset(dff1,dff1$sex == 'F')
+
+#COmo no sigue una normal, hacemos uso del test Wilcox, 
+#que analiza si las medianas de estos dos grupos son diferentes. 
+t.test(df_m$age, df_f$age)
+```
+Como el $$ p-value$$ sale menor a 0.05, se podría aceptar que  hay diferencia de edad media en entre las hombres enfermos con una enfermedad cardiovascular y las mujeres.   
+
+# 5. Representación de los resultados a partir de tablas y gráficas. 
+A lo largo de toda la práctica se han utilizado visualizaciones. 
+
+
+
+# 6. Resolución del problema.
+El problema presentado en un inicio era el análisis de los pacientes enfermos de una enfermedad cardiovascular, a continuación se especifican los resultados de dicho análisis:
+
+Para empezar, se ha visto que la variable que más efecto tiene sobre la variable dependiente, es thalachh, la frecuencia cardíaca máxima alcanzada de las personas. Esto se ha podido ver tanto en el análisis de correlaciones como en el modelo logístico. 
+
+Por otro lado, gracias al análisis de contrastes de media realizado se ha podido concluir que la edad media de los hombres que padecen enfermedades cardiovasculares es igual al de las mujeres, es decir, no hay una significancia estadística. 
+
